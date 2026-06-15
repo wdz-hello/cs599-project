@@ -84,7 +84,7 @@ def run_qa_agent(state: AgentState) -> dict:
         model=model,
         messages=messages,
         temperature=0.1,
-        max_tokens=4096,
+        max_tokens=8192,
     )
 
     result_text = response.choices[0].message.content

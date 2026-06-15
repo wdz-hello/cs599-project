@@ -1,27 +1,32 @@
 """Spec Architect Agent — analyzes requirements and generates SDD spec documents."""
 
-from langchain_core.tools import tool
+import re
 from src.config.llm_config import create_llm_client, get_model_name
 from src.state.workflow_state import AgentState
-import json
 
 
 SYSTEM_PROMPT = """你是一位资深软件架构师，专精于规格驱动开发（SDD）。
 
-你的职责：
-1. 分析用户需求，理解其核心意图
-2. 生成产品规格文档（Product Spec）：定义功能需求、用户故事、验收标准
-3. 生成架构规格文档（Architecture Spec）：定义系统组件、技术栈、数据流
-4. 生成 API 规格文档（API Spec）：定义接口契约、数据模型
+你的职责：分析用户需求，生成三份结构化的规格文档。
 
-输出格式要求：使用 Markdown，结构清晰，包含具体的技术细节而非泛泛而谈。
-输出必须是合法的 JSON，格式为：
-{
-  "product_spec": "...",
-  "architecture_spec": "...",
-  "api_spec": "...",
-  "analysis": "..."
-}
+严格按以下 Markdown 格式输出，每份文档以二级标题开头：
+
+## Product Spec
+（产品规格：功能概述、用户故事、功能需求列表、非功能需求、验收标准）
+
+## Architecture Spec
+（架构规格：系统架构图 ASCII art、组件说明、技术栈选择及理由、数据流设计、部署方案）
+
+## API Spec
+（API 规格：接口定义、数据模型、请求/响应格式、错误码定义）
+
+## Analysis
+（简要分析：技术方案总结、关键设计决策、风险点）
+
+注意：
+- 每份文档内容要具体，包含代码示例和具体的技术参数
+- 不要输出 JSON 格式，直接输出 Markdown
+- 使用二级标题 ## 分隔每个部分
 """
 
 
@@ -47,39 +52,44 @@ def create_spec_architect_prompt(state: AgentState) -> str:
 {language}
 {revision_note}
 
-请输出包含 product_spec、architecture_spec、api_spec 三个部分的 JSON。"""
+请按格式输出 Product Spec、Architecture Spec、API Spec 和 Analysis 四个部分。"""
 
 
 def parse_spec_response(response: str) -> dict:
-    """Parse the LLM response to extract spec documents."""
+    """Parse markdown-structured spec response by splitting on ## headings."""
     content = response.strip()
 
-    # Try to extract JSON from markdown code blocks
-    if "```json" in content:
-        start = content.find("```json") + 7
-        end = content.find("```", start)
-        content = content[start:end].strip()
-    elif "```" in content:
-        start = content.find("```") + 3
-        end = content.find("```", start)
-        content = content[start:end].strip()
+    # Extract sections by ## headings
+    sections = {"product_spec": "", "architecture_spec": "", "api_spec": "", "analysis": ""}
 
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        return {
-            "product_spec": content,
-            "architecture_spec": "",
-            "api_spec": "",
-            "analysis": "Failed to parse structured JSON output",
-        }
+    # Split on ## heading markers
+    pattern = r'##\s+(Product Spec|Architecture Spec|API Spec|Analysis)'
+    parts = re.split(pattern, content, flags=re.IGNORECASE)
+
+    # parts[0] is before first heading, then alternating (heading, content)
+    for i in range(1, len(parts), 2):
+        heading = parts[i].strip().lower()
+        body = parts[i + 1].strip() if i + 1 < len(parts) else ""
+
+        if "product" in heading:
+            sections["product_spec"] = body
+        elif "architect" in heading:
+            sections["architecture_spec"] = body
+        elif "api" in heading:
+            sections["api_spec"] = body
+        elif "analysis" in heading:
+            sections["analysis"] = body
+
+    # Fallback: if no sections were parsed, treat whole response as product_spec
+    if not any(sections.values()):
+        sections["product_spec"] = content
+        sections["analysis"] = "Failed to parse structured output — using raw response as product spec."
+
+    return sections
 
 
 def run_spec_architect(state: AgentState) -> dict:
-    """Execute the Spec Architect agent.
-
-    Takes current AgentState, returns updates to merge into state.
-    """
+    """Execute the Spec Architect agent."""
     client = create_llm_client()
     model = get_model_name()
 
@@ -92,7 +102,7 @@ def run_spec_architect(state: AgentState) -> dict:
         model=model,
         messages=messages,
         temperature=0.2,
-        max_tokens=4096,
+        max_tokens=8192,
     )
 
     result_text = response.choices[0].message.content
