@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  devmind:
+    build: .
+    container_name: devmind-app
+    ports:
+      - "8501:8501"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
+      - CHROMA_PERSIST_DIR=/app/data/chroma_db
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
+    volumes:
+      - devmind_data:/app/data
+      - ./src:/app/src:ro
+      - ./docs:/app/docs:ro
+    restart: unless-stopped
+
+volumes:
+  devmind_data:
