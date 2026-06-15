@@ -158,7 +158,12 @@ if run_button and requirement.strip():
             for node_name, node_output in step.items():
                 # Accumulate state
                 if node_output:
-                    result.update(node_output)
+                    for key, val in node_output.items():
+                        # Handle Annotated[Sequence, add] fields: append, not overwrite
+                        if key in ("generated_files", "messages") and isinstance(val, list) and key in result and isinstance(result[key], list):
+                            result[key] = result[key] + val
+                        else:
+                            result[key] = val
 
                 if node_name in node_progress:
                     pct, text = node_progress[node_name]
