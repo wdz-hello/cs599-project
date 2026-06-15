@@ -135,29 +135,42 @@ if run_button and requirement.strip():
     # Create and run workflow
     workflow = create_workflow()
 
-    # Use streaming to show progress
-    phases_progress = {
-        WorkflowPhase.SPEC_WRITING: (10, "Spec Architect 分析需求中..."),
-        WorkflowPhase.SPEC_REVIEW: (25, "规格文档已生成"),
-        WorkflowPhase.CODING: (50, "Developer Agent 生成代码中..."),
-        WorkflowPhase.CODE_REVIEW: (75, "Reviewer Agent 审查代码中..."),
-        WorkflowPhase.TESTING: (90, "QA Agent 生成测试中..."),
-        WorkflowPhase.COMPLETE: (100, "工作流完成！"),
+    # Node name -> progress mapping for real-time streaming
+    node_progress = {
+        "spec_architect": (15, "Spec Architect 正在分析需求、生成规格文档..."),
+        "developer": (40, "Developer Agent 正在根据规格生成代码..."),
+        "reviewer": (65, "Reviewer Agent 正在审查代码质量与安全性..."),
+        "qa_agent": (85, "QA Agent 正在生成测试用例并评估..."),
+        "finalize": (100, "正在生成最终报告..."),
     }
 
     # Start trace
     trace_id = trace_manager.start_trace("web_ui_run", {"requirement": requirement[:100]})
 
     try:
-        # Execute workflow
-        with st.spinner("Agent 工作中..."):
-            result = workflow.invoke(initial_state)
+        # Execute workflow with streaming for real-time progress
+        result = dict(initial_state)  # start with initial state
+        status_area.info("工作流启动，正在初始化...")
+        progress_bar.progress(5, text="正在连接 LLM...")
 
-        # Update progress
-        phase = result.get("phase", WorkflowPhase.ERROR)
-        for p, (progress_val, status_text) in phases_progress.items():
-            if phase == p or list(WorkflowPhase).index(phase) >= list(WorkflowPhase).index(p):
-                progress_bar.progress(progress_val, text=status_text)
+        for step in workflow.stream(initial_state):
+            # step is dict like {"spec_architect": {"product_spec": ..., "phase": ...}}
+            for node_name, node_output in step.items():
+                # Accumulate state
+                if node_output:
+                    result.update(node_output)
+
+                if node_name in node_progress:
+                    pct, text = node_progress[node_name]
+                    progress_bar.progress(pct, text=text)
+                    status_area.success(f"✅ {text}")
+                elif node_name == "handle_error":
+                    progress_bar.progress(100, text="工作流出错")
+                    status_area.error("❌ 工作流遇到错误")
+
+        if result.get("phase") == WorkflowPhase.INIT:
+            st.error("工作流未能正常执行")
+            st.stop()
 
         st.session_state.last_result = result
         st.session_state.workflow_completed = True
