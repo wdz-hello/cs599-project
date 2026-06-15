@@ -177,7 +177,7 @@ if run_button and requirement.strip():
         st.session_state.total_runs += 1
         st.session_state.chat_history.append({
             "requirement": requirement,
-            "result_summary": "Completed" if phase == WorkflowPhase.COMPLETE else f"Ended at {phase}",
+            "result_summary": "Completed" if result.get("phase") == WorkflowPhase.COMPLETE else f"Ended at {result.get('phase', 'unknown')}",
         })
 
         trace_manager.end_trace(trace_id, "success")
