@@ -177,6 +177,9 @@ if run_button and requirement.strip():
             st.error("工作流未能正常执行")
             st.stop()
 
+        # Clear progress indicators (entire container including subheader)
+        progress_container.empty()
+
         st.session_state.last_result = result
         st.session_state.workflow_completed = True
         st.session_state.total_runs += 1
