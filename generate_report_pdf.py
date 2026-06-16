@@ -325,34 +325,58 @@ def md_to_html(md_path):
 
 
 def extract_headings(md_path):
-    """Extract headings from markdown for bookmarks."""
+    """Extract headings from markdown for bookmarks, skipping code blocks."""
     headings = []
+    in_code_block = False
     with open(md_path, "r", encoding="utf-8") as f:
         for line in f:
-            m = re.match(r"^(#{1,3})\s+(.+)$", line.strip())
+            stripped = line.strip()
+            # Track fenced code blocks
+            if stripped.startswith("```"):
+                in_code_block = not in_code_block
+                continue
+            if in_code_block:
+                continue
+            # Extract headings
+            m = re.match(r"^(#{1,3})\s+(.+)$", stripped)
             if m:
                 level = len(m.group(1))
                 title = m.group(2).strip()
-                # Skip the cover page heading
-                if title == "封面页":
+                # Skip cover page and main title headings
+                if title in ("封面页", "CS599 期末大作业报告"):
                     continue
                 headings.append((level, title))
     return headings
 
 
 def add_bookmarks(pdf_path, headings):
-    """Add bookmarks to PDF using PyMuPDF."""
+    """Add bookmarks to PDF using PyMuPDF by searching for heading text."""
     import fitz
 
     doc = fitz.open(pdf_path)
-    page_count = doc.page_count
-    bookmarks = []
+    toc = []
 
-    # Simple heuristic: distribute headings across pages
-    # In practice, you'd parse the HTML to find exact positions
-    # For now, skip bookmarks to avoid errors
-    print(f"Skipping bookmarks (PDF has {page_count} pages, {len(headings)} headings)")
-    # TODO: Implement proper bookmark mapping
+    for level, title in headings:
+        # Search for the heading text in the PDF
+        found_page = None
+        for page_num in range(doc.page_count):
+            page = doc[page_num]
+            # Search for the title text on this page
+            text_instances = page.search_for(title)
+            if text_instances:
+                # Found on this page - use 1-based page number
+                found_page = page_num + 1
+                break
+
+        if found_page:
+            toc.append([level, title, found_page])
+
+    if toc:
+        doc.set_toc(toc)
+        doc.saveIncr()
+        print(f"Added {len(toc)} bookmarks to PDF")
+    else:
+        print("Warning: No bookmarks added (headings not found in PDF)")
 
     doc.close()
 
